@@ -187,11 +187,18 @@ export default function HomePage() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5 }}
-              className="mb-6"
+              className="mb-6 inline-block"
             >
-              <span className="inline-block px-4 py-2 rounded-full bg-primary/10 text-primary font-medium text-sm">
-                Trusted by 500+ Institutes across India
-              </span>
+              <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-cyan-500/20 bg-cyan-500/5 shadow-[0_0_20px_rgba(6,182,212,0.15)]">
+                <span className="text-sm">✨</span>
+                <motion.span
+                  animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                  className="font-bold text-sm bg-[linear-gradient(90deg,#2563eb,#06b6d4,#14b8a6,#2563eb)] bg-[length:200%_100%] bg-clip-text text-transparent"
+                >
+                  Trusted by 500+ Institutes across India
+                </motion.span>
+              </div>
             </motion.div>
 
             <motion.h1
