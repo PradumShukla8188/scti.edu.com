@@ -1,6 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { motion } from 'framer-motion';
 import {
   Phone,
@@ -17,6 +20,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Navbar } from '@/components/navbar';
 import { Footer } from '@/components/footer';
 import { FadeIn } from '@/components/animations';
+import { submitContactQuery } from '@/services/contact.service';
+import { toast } from 'sonner';
 
 const contactInfo = [
   {
@@ -52,19 +57,43 @@ const offices = [
   },
 ];
 
+const contactSchema = z.object({
+  name: z.string().min(2, "Name is required"),
+  email: z.string().email("Invalid email address"),
+  phone: z.string().min(10, "Valid phone number required"),
+  subject: z.string().min(2, "Subject is required"),
+  message: z.string().min(10, "Message must be at least 10 characters long"),
+});
+
 export default function ContactPage() {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    subject: '',
-    message: '',
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { register, handleSubmit, formState: { errors }, reset } = useForm({
+    resolver: zodResolver(contactSchema),
+    mode: 'onTouched',
+    defaultValues: {
+      name: '',
+      email: '',
+      phone: '',
+      subject: '',
+      message: '',
+    }
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Handle form submission - would send to API in production
-    console.log('Form submitted:', formData);
+  const onSubmit = async (data: any) => {
+    setIsSubmitting(true);
+    try {
+      const response = await submitContactQuery(data);
+      if (response.success) {
+        toast.success(response.message || 'Your query successfully recorded. We will contact you as soon as possible.');
+        reset();
+      }
+    } catch (error) {
+      console.error('Submission error:', error);
+      toast.error('Failed to submit query. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -138,7 +167,7 @@ export default function ContactPage() {
 
                 <Card className="glass-card">
                   <CardContent className="pt-6">
-                    <form onSubmit={handleSubmit} className="space-y-6">
+                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                       <div className="grid sm:grid-cols-2 gap-6">
                         <div>
                           <label className="block text-sm font-medium mb-2">
@@ -147,12 +176,11 @@ export default function ContactPage() {
                           </label>
                           <input
                             type="text"
-                            required
-                            value={formData.name}
-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                            {...register('name')}
                             placeholder="Enter your name"
-                            className="w-full px-4 py-3 rounded-xl border bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                            className={`w-full px-4 py-3 rounded-xl border bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all ${errors.name ? 'border-red-500' : ''}`}
                           />
+                          {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message as string}</p>}
                         </div>
                         <div>
                           <label className="block text-sm font-medium mb-2">
@@ -161,27 +189,26 @@ export default function ContactPage() {
                           </label>
                           <input
                             type="email"
-                            required
-                            value={formData.email}
-                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                            {...register('email')}
                             placeholder="Enter your email"
-                            className="w-full px-4 py-3 rounded-xl border bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                            className={`w-full px-4 py-3 rounded-xl border bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all ${errors.email ? 'border-red-500' : ''}`}
                           />
+                          {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email.message as string}</p>}
                         </div>
                       </div>
                       <div className="grid sm:grid-cols-2 gap-6">
                         <div>
                           <label className="block text-sm font-medium mb-2">
                             <Phone className="h-4 w-4 inline-block mr-1" />
-                            Phone Number
+                            Phone Number *
                           </label>
                           <input
                             type="tel"
-                            value={formData.phone}
-                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                            {...register('phone')}
                             placeholder="Enter your phone"
-                            className="w-full px-4 py-3 rounded-xl border bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                            className={`w-full px-4 py-3 rounded-xl border bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all ${errors.phone ? 'border-red-500' : ''}`}
                           />
+                          {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone.message as string}</p>}
                         </div>
                         <div>
                           <label className="block text-sm font-medium mb-2">
@@ -190,28 +217,26 @@ export default function ContactPage() {
                           </label>
                           <input
                             type="text"
-                            required
-                            value={formData.subject}
-                            onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                            {...register('subject')}
                             placeholder="How can we help?"
-                            className="w-full px-4 py-3 rounded-xl border bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                            className={`w-full px-4 py-3 rounded-xl border bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all ${errors.subject ? 'border-red-500' : ''}`}
                           />
+                          {errors.subject && <p className="text-xs text-red-500 mt-1">{errors.subject.message as string}</p>}
                         </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium mb-2">Message *</label>
                         <textarea
                           rows={5}
-                          required
-                          value={formData.message}
-                          onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                          {...register('message')}
                           placeholder="Tell us about your requirements..."
-                          className="w-full px-4 py-3 rounded-xl border bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all resize-none"
+                          className={`w-full px-4 py-3 rounded-xl border bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all resize-none ${errors.message ? 'border-red-500' : ''}`}
                         />
+                        {errors.message && <p className="text-xs text-red-500 mt-1">{errors.message.message as string}</p>}
                       </div>
-                      <Button type="submit" className="w-full gradient-primary text-white rounded-full" size="lg">
+                      <Button type="submit" disabled={isSubmitting} className="w-full gradient-primary text-white rounded-full" size="lg">
                         <Send className="h-4 w-4 mr-2" />
-                        Send Message
+                        {isSubmitting ? 'Sending...' : 'Send Message'}
                       </Button>
                     </form>
                   </CardContent>

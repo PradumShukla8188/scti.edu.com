@@ -15,7 +15,9 @@ const navLinks = [
   { href: '/services', label: 'Services' },
   { href: '/features', label: 'Features' },
   { href: '/franchise', label: 'Franchise' },
-  { href: '/verify', label: 'Certificate Verification' },
+  // { href: '/verify', label: 'Certificate Verification' },
+  { href: '/donate', label: 'Donate' },
+  { href: '/privacy-policy', label: 'Privacy Policy' },
   { href: '/contact', label: 'Contact' },
 ];
 

@@ -1,7 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import Script from 'next/script';
+import { getPlans, createOrder, verifyPayment } from '@/services/payment.service';
+import { toast } from 'sonner';
+import { ReceiptModal, ReceiptData } from '@/components/receipt-modal';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import {
   Building,
   Users,
@@ -17,6 +28,7 @@ import {
   Rocket,
   Shield,
   TrendingUp,
+  Star,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -56,12 +68,6 @@ const eligibility = [
   'Good local network',
 ];
 
-const investments = [
-  { level: 'Basic', amount: '₹50,000 - ₹75,000', features: ['Single Location', 'Basic Features', 'Email Support'] },
-  { level: 'Standard', amount: '₹75,000 - ₹1,50,000', features: ['Multiple Locations', 'All Features', 'Phone Support'] },
-  { level: 'Premium', amount: '₹1,50,000 - ₹2,00,000', features: ['District Level', 'Custom Features', 'Priority Support', 'Marketing Assistance'] },
-];
-
 const support = [
   { icon: BookOpen, title: 'Training', desc: 'Complete technical and business training' },
   { icon: Shield, title: 'Technology', desc: 'Fully hosted and maintained platform' },
@@ -96,15 +102,116 @@ const faqs = [
   },
 ];
 
+const reviews = [
+  { name: "Rahul Sharma", role: "Director, Apex Classes", review: "The institute management features are top-notch. The certificate and marksheet issuing works flawlessly and saves us a ton of time!", rating: 5 },
+  { name: "Priya Singh", role: "Owner, Excellence Academy", review: "Great platform! Setup was so quick and the team was extremely helpful in migrating our existing student data.", rating: 5 },
+  { name: "Amit Verma", role: "Founder, Vision Coaching", review: "Best franchise decision. The 24/7 support is real, they helped us onboard fast.", rating: 4 },
+  { name: "Neha Gupta", role: "Manager, Future Prep", review: "Highly recommend for any growing coaching center. Very transparent revenue model.", rating: 5 },
+];
+
+const buyFormSchema = z.object({
+  fullName: z.string().min(2, "Name is required"),
+  email: z.string().email("Invalid email"),
+  phoneNumber: z.string().min(10, "Valid phone number required"),
+  instituteName: z.string().min(2, "Institute name is required")
+});
+
 export default function FranchisePage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [plans, setPlans] = useState<any[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<any>(null);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+
+  const { register, handleSubmit, formState: { errors }, reset } = useForm({
+    resolver: zodResolver(buyFormSchema)
+  });
+
+  useEffect(() => {
+    // Fetch plans from backend
+    getPlans()
+      .then(data => setPlans(data))
+      .catch(err => console.error('Failed to fetch plans', err));
+  }, []);
 
   const toggleFaq = (index: number) => {
     setOpenFaq(openFaq === index ? null : index);
   };
 
+  const handleBuyClick = (plan: any) => {
+    setSelectedPlan(plan);
+    setIsModalOpen(true);
+  };
+
+  const onSubmitBuy = async (formData: any) => {
+    try {
+      if (!selectedPlan) return;
+      const orderData = await createOrder({
+        fullName: formData.fullName,
+        email: formData.email,
+        phoneNumber: formData.phoneNumber,
+        instituteName: formData.instituteName,
+        planId: selectedPlan._id,
+      });
+
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID, // Use the environment variable
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: 'SCTI Franchise',
+        description: `Payment for ${selectedPlan.planName}`,
+        order_id: orderData.id,
+        handler: async function (response: any) {
+          const verifyData = await verifyPayment({
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          });
+          
+          if (verifyData.success) {
+            toast.success('Payment Successful!');
+            setReceiptData({
+              id: verifyData.transactionId || response.razorpay_payment_id,
+              type: 'Franchise Subscription',
+              amount: selectedPlan.price,
+              date: new Date().toLocaleDateString(),
+              name: formData.fullName,
+              email: formData.email,
+              details: `Plan: ${selectedPlan.planName}`
+            });
+            setIsModalOpen(false);
+            reset();
+          } else {
+            toast.error('Payment Verification Failed!');
+          }
+        },
+        prefill: {
+          name: formData.fullName,
+          email: formData.email,
+          contact: formData.phoneNumber,
+        },
+        theme: {
+          color: '#3399cc',
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', function (response: any) {
+        toast.error(response.error.description);
+      });
+      rzp.open();
+      
+      setIsModalOpen(false);
+      reset();
+    } catch (error) {
+      console.error('Payment Error', error);
+      toast.error('Error initiating payment');
+    }
+  };
+
   return (
     <main className="min-h-screen">
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" />
       <Navbar />
 
       {/* Hero Section */}
@@ -198,35 +305,95 @@ export default function FranchisePage() {
             <span className="text-primary font-semibold text-sm uppercase tracking-wide">Investment</span>
             <h2 className="text-3xl md:text-4xl font-bold mt-2 mb-4">Choose Your Plan</h2>
             <p className="text-muted-foreground">
-              Flexible investment options to suit your budget and business goals
+              Flexible investment options to suit your budget and business goals. Complete payment options including GPay, PhonePe, Net Banking, and Cards are supported.
             </p>
           </FadeIn>
 
-          <StaggerContainer className="grid md:grid-cols-3 gap-6">
-            {investments.map((plan, index) => (
-              <motion.div key={plan.level} variants={staggerItem}>
-                <Card className={`h-full ${index === 1 ? 'border-primary shadow-xl' : ''} hover:shadow-xl transition-shadow`}>
-                  <CardContent className="pt-8">
-                    {index === 1 && (
-                      <span className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-4">
-                        Most Popular
-                      </span>
-                    )}
-                    <h3 className="text-2xl font-bold mb-2">{plan.level}</h3>
-                    <p className="text-3xl font-bold gradient-text mb-6">{plan.amount}</p>
-                    <ul className="space-y-3">
-                      {plan.features.map((feature) => (
-                        <li key={feature} className="flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4 text-primary flex-shrink-0" />
-                          <span className="text-sm text-muted-foreground">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </StaggerContainer>
+          {plans.length > 0 ? (
+            <StaggerContainer className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {plans.map((plan, index) => (
+                <motion.div key={plan._id || index} variants={staggerItem}>
+                  <Card className={`h-full ${index === 1 ? 'border-primary shadow-xl' : ''} hover:shadow-xl transition-shadow`}>
+                    <CardContent className="pt-8 flex flex-col justify-between h-full">
+                      <div>
+                        {index === 1 && (
+                          <span className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-4">
+                            Most Popular
+                          </span>
+                        )}
+                        <h3 className="text-2xl font-bold mb-2 capitalize">{plan.planName}</h3>
+                        <div className="flex items-baseline gap-2 mb-6">
+                          <p className="text-3xl font-bold gradient-text">{plan.displayPrice || `₹${plan.price}`}</p>
+                          {plan.duration && <span className="text-sm text-muted-foreground">/ {plan.duration}</span>}
+                        </div>
+                        <ul className="space-y-3 mb-6">
+                          {plan.features?.map((feature: string, fIndex: number) => (
+                            <li key={fIndex} className="flex items-center gap-2">
+                              <CheckCircle className="h-4 w-4 text-primary flex-shrink-0" />
+                              <span className="text-sm text-muted-foreground">{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <Button 
+                        onClick={() => handleBuyClick(plan)}
+                        className="w-full mt-auto bg-primary text-primary-foreground hover:bg-primary/90"
+                      >
+                        Buy Now
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </StaggerContainer>
+          ) : (
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Subscriber Reviews Slider */}
+      <section className="section-padding bg-gray-50 dark:bg-gray-900/50">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <FadeIn className="text-center max-w-3xl mx-auto mb-12">
+            <span className="text-primary font-semibold text-sm uppercase tracking-wide">Testimonials</span>
+            <h2 className="text-3xl md:text-4xl font-bold mt-2 mb-4">What Our Partners Say</h2>
+          </FadeIn>
+
+          <Carousel
+            opts={{
+              align: 'start',
+              loop: true,
+            }}
+            className="w-full max-w-5xl mx-auto"
+          >
+            <CarouselContent>
+              {reviews.map((review, index) => (
+                <CarouselItem key={index} className="md:basis-1/2 lg:basis-1/3 p-4">
+                  <Card className="h-full bg-white dark:bg-gray-800 border-none shadow-md">
+                    <CardContent className="p-6 flex flex-col h-full">
+                      <div className="flex items-center gap-1 mb-4 text-yellow-400">
+                        {[...Array(review.rating)].map((_, i) => (
+                          <Star key={i} className="w-4 h-4 fill-current" />
+                        ))}
+                      </div>
+                      <p className="text-muted-foreground flex-grow mb-6 italic">"{review.review}"</p>
+                      <div>
+                        <p className="font-semibold">{review.name}</p>
+                        <p className="text-xs text-primary">{review.role}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </CarouselItem>
+              ))}
+            </CarouselContent>
+            <div className="hidden md:block">
+              <CarouselPrevious className="-left-12" />
+              <CarouselNext className="-right-12" />
+            </div>
+          </Carousel>
         </div>
       </section>
 
@@ -318,9 +485,9 @@ export default function FranchisePage() {
                       <label className="block text-sm font-medium mb-2">Investment Range</label>
                       <select className="w-full px-4 py-3 rounded-xl border bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all">
                         <option value="">Select investment range</option>
-                        <option value="basic">₹50,000 - ₹75,000</option>
-                        <option value="standard">₹75,000 - ₹1,50,000</option>
-                        <option value="premium">₹1,50,000 - ₹2,00,000</option>
+                        {plans.map(p => (
+                          <option key={p._id} value={p._id}>{p.planName} - ₹{p.price}</option>
+                        ))}
                       </select>
                     </div>
                     <div>
@@ -402,6 +569,55 @@ export default function FranchisePage() {
       </section>
 
       <Footer />
+
+      {/* Buy Now Dialog */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Complete Your Purchase</DialogTitle>
+            <DialogDescription>
+              Please provide your details to buy the {selectedPlan?.planName}.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmitBuy)} className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="fullName">Full Name</Label>
+              <Input id="fullName" {...register('fullName')} placeholder="John Doe" />
+              {errors.fullName && <p className="text-xs text-red-500">{errors.fullName.message as string}</p>}
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" {...register('email')} placeholder="john@example.com" />
+              {errors.email && <p className="text-xs text-red-500">{errors.email.message as string}</p>}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phoneNumber">Phone Number</Label>
+              <Input id="phoneNumber" type="tel" {...register('phoneNumber')} placeholder="9999999999" />
+              {errors.phoneNumber && <p className="text-xs text-red-500">{errors.phoneNumber.message as string}</p>}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="instituteName">Institute Name</Label>
+              <Input id="instituteName" {...register('instituteName')} placeholder="My Coaching Center" />
+              {errors.instituteName && <p className="text-xs text-red-500">{errors.instituteName.message as string}</p>}
+            </div>
+
+            <div className="pt-4">
+              <Button type="submit" className="w-full">
+                Proceed to Payment
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <ReceiptModal 
+        isOpen={!!receiptData} 
+        onClose={() => setReceiptData(null)} 
+        data={receiptData} 
+      />
     </main>
   );
 }
